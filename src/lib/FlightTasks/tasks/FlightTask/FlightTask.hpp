@@ -166,7 +166,7 @@ public:
 	/**
 	 * Call this whenever a parameter update notification is received (parameter_update uORB message)
 	 */
-	void handleParameterUpdate()
+	void virtual handleParameterUpdate()
 	{
 		updateParams();
 	}
