@@ -62,8 +62,11 @@ MulticopterRateControl::MulticopterRateControl() :
 	_rates_prev_filtered.zero();
 	_rates_sp.zero();
 	_rates_int.zero();
-	_thrust_sp = 0.0f;
 	_att_control.zero();
+
+	_rates_p_scaled.zero();
+	_rates_i_scaled.zero();
+	_rates_d_scaled.zero();
 
 	parameters_updated();
 }
@@ -168,14 +171,14 @@ MulticopterRateControl::get_landing_gear_state()
 /*
  * Throttle PID attenuation
  * Function visualization available here https://www.desmos.com/calculator/gn4mfoddje
- * Input: 'tpa_breakpoint', 'tpa_rate', '_thrust_sp'
+ * Input: 'thrust_sp', 'tpa_breakpoint', 'tpa_rate'
  * Output: 'pidAttenuationPerAxis' vector
  */
 Vector3f
-MulticopterRateControl::pid_attenuations(float tpa_breakpoint, float tpa_rate)
+MulticopterRateControl::pid_attenuations(float thrust_sp, float tpa_breakpoint, float tpa_rate) const
 {
 	/* throttle pid attenuation factor */
-	float tpa = 1.0f - tpa_rate * (fabsf(_thrust_sp) - tpa_breakpoint) / (1.0f - tpa_breakpoint);
+	float tpa = 1.0f - tpa_rate * (fabsf(thrust_sp) - tpa_breakpoint) / (1.0f - tpa_breakpoint);
 	tpa = fmaxf(TPA_RATE_LOWER_LIMIT, fminf(1.0f, tpa));
 
 	return Vector3f{tpa, tpa, 1.0f};
@@ -183,7 +186,7 @@ MulticopterRateControl::pid_attenuations(float tpa_breakpoint, float tpa_rate)
 
 /*
  * Attitude rates controller.
- * Input: '_rates_sp' vector, '_thrust_sp'
+ * Input: '_rates_sp' vector
  * Output: '_att_control' vector
  */
 void
@@ -194,19 +197,15 @@ MulticopterRateControl::control_attitude_rates(float dt, const Vector3f &rates)
 		_rates_int.zero();
 	}
 
-	Vector3f rates_p_scaled = _rate_p.emult(pid_attenuations(_param_mc_tpa_break_p.get(), _param_mc_tpa_rate_p.get()));
-	Vector3f rates_i_scaled = _rate_i.emult(pid_attenuations(_param_mc_tpa_break_i.get(), _param_mc_tpa_rate_i.get()));
-	Vector3f rates_d_scaled = _rate_d.emult(pid_attenuations(_param_mc_tpa_break_d.get(), _param_mc_tpa_rate_d.get()));
-
 	// angular rates error
 	Vector3f rates_err = _rates_sp - rates;
 
 	// apply low-pass filtering to the rates for D-term
 	const Vector3f rates_filtered(_lp_filters_d.apply(rates));
 
-	_att_control = _rate_k.emult(rates_p_scaled.emult(rates_err) +
+	_att_control = _rate_k.emult(_rates_p_scaled.emult(rates_err) +
 				     _rates_int -
-				     rates_d_scaled.emult(rates_filtered - _rates_prev_filtered) / dt) +
+				     _rates_d_scaled.emult(rates_filtered - _rates_prev_filtered) / dt) +
 		       _rate_ff.emult(_rates_sp);
 
 	_rates_prev = rates;
@@ -248,7 +247,7 @@ MulticopterRateControl::control_attitude_rates(float dt, const Vector3f &rates)
 			i_factor = math::max(0.0f, 1.f - i_factor * i_factor);
 
 			// Perform the integration using a first order method and do not propagate the result if out of range or invalid
-			float rate_i = _rates_int(i) + i_factor * rates_i_scaled(i) * rates_err(i) * dt;
+			float rate_i = _rates_int(i) + i_factor * _rates_i_scaled(i) * rates_err(i) * dt;
 
 			if (PX4_ISFINITE(rate_i) && rate_i > -_rate_int_lim(i) && rate_i < _rate_int_lim(i)) {
 				_rates_int(i) = rate_i;
@@ -416,7 +415,17 @@ MulticopterRateControl::Run()
 				_rates_sp(1) = v_rates_sp.pitch;
 				_rates_sp(2) = v_rates_sp.yaw;
 				_thrust_sp = -v_rates_sp.thrust_body[2];
+
 			}
+		}
+
+		// update scaled rates (TPA) on throttle change
+		if (fabsf(_thrust_sp - _thrust_sp_prev) > 0.01f) {
+			_rates_p_scaled = _rate_p.emult(pid_attenuations(_thrust_sp, _param_mc_tpa_break_p.get(), _param_mc_tpa_rate_p.get()));
+			_rates_i_scaled = _rate_i.emult(pid_attenuations(_thrust_sp, _param_mc_tpa_break_i.get(), _param_mc_tpa_rate_i.get()));
+			_rates_d_scaled = _rate_d.emult(pid_attenuations(_thrust_sp, _param_mc_tpa_break_d.get(), _param_mc_tpa_rate_d.get()));
+
+			_thrust_sp_prev = _thrust_sp;
 		}
 
 		// calculate loop update rate while disarmed or at least a few times (updating the filter is expensive)

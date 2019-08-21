@@ -122,7 +122,7 @@ private:
 	/**
 	 * Throttle PID attenuation.
 	 */
-	matrix::Vector3f pid_attenuations(float tpa_breakpoint, float tpa_rate);
+	matrix::Vector3f pid_attenuations(float thrust_sp, float tpa_breakpoint, float tpa_rate) const;
 
 
 	uORB::Subscription _v_rates_sp_sub{ORB_ID(vehicle_rates_setpoint)};		/**< vehicle rates setpoint subscription */
@@ -171,6 +171,7 @@ private:
 
 	matrix::Vector3f	_att_control;			/**< attitude control vector */
 	float			_thrust_sp{0.0f};		/**< thrust setpoint */
+	float			_thrust_sp_prev{0.0f};		/**< previous thrust setpoint */
 
 	bool			_gear_state_initialized{false};		/**< true if the gear state has been initialized */
 
@@ -232,6 +233,10 @@ private:
 	matrix::Vector3f _rate_d;		/**< D gain for angular rate error */
 	matrix::Vector3f _rate_ff;		/**< Feedforward gain for desired rates */
 	matrix::Vector3f _rate_k;		/**< Rate controller global gain */
+
+	matrix::Vector3f _rates_p_scaled;
+	matrix::Vector3f _rates_i_scaled;
+	matrix::Vector3f _rates_d_scaled;
 
 	matrix::Vector3f _acro_rate_max;	/**< max attitude rates in acro mode */
 
