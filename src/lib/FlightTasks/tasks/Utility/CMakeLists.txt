@@ -39,5 +39,7 @@ px4_add_library(FlightTaskUtility
 	VelocitySmoothing.cpp
 )
 
-target_link_libraries(FlightTaskUtility PUBLIC FlightTask)
+target_link_libraries(FlightTaskUtility PUBLIC FlightTask hysteresis)
 target_include_directories(FlightTaskUtility PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
+
+px4_add_functional_gtest(SRC ObstacleAvoidanceTest.cpp LINKLIBS FlightTaskUtility)
