@@ -46,16 +46,29 @@ enum class LED_PATTERN : uint16_t {
 	IO_FMU_ARMED		= 0xffff,	/**< constantly on */
 };
 
+SafetyButton::SafetyButton() :
+	ScheduledWorkItem(px4::wq_configurations::hp_default)
+{
+	_safety_disabled = circuit_breaker_enabled("CBRK_IO_SAFETY", CBRK_IO_SAFETY_KEY);
+
+	if (_safety_disabled) {
+		_safety_off = true;
+		_safety_btn_off = true;
+	}
+}
+
 SafetyButton::~SafetyButton()
 {
 	ScheduleClear();
 }
 
-void
+bool
 SafetyButton::CheckButton()
 {
+	bool safety_button_pressed = false;
+#ifdef GPIO_BTN_SAFETY
 	// Debounce the safety button, change state if it has been held for long enough.
-	bool safety_button_pressed = px4_arch_gpioread(GPIO_BTN_SAFETY);
+	safety_button_pressed = px4_arch_gpioread(GPIO_BTN_SAFETY);
 
 	/*
 	 * Keep pressed for a while to arm.
@@ -70,8 +83,11 @@ SafetyButton::CheckButton()
 			_button_counter++;
 
 		} else if (_button_counter == CYCLE_COUNT) {
-			// switch to armed state
-			_safety_btn_off = true;
+			if (!PX4_MFT_HW_SUPPORTED(PX4_MFT_PX4IO) && !_safety_disabled) {
+				// switch to armed state
+				_safety_btn_off = true;
+			}
+
 			_button_counter++;
 		}
 
@@ -81,14 +97,20 @@ SafetyButton::CheckButton()
 			_button_counter++;
 
 		} else if (_button_counter == CYCLE_COUNT) {
-			// change to disarmed state and notify
-			_safety_btn_off = false;
+			if (!PX4_MFT_HW_SUPPORTED(PX4_MFT_PX4IO) && !_safety_disabled) {
+				// change to disarmed state and notify
+				_safety_btn_off = false;
+			}
+
 			_button_counter++;
 		}
 
 	} else {
 		_button_counter = 0;
 	}
+
+#endif // GPIO_BTN_SAFETY
+	return safety_button_pressed;
 }
 
 void
@@ -136,33 +158,45 @@ SafetyButton::Run()
 	}
 
 	// read safety switch input and control safety switch LED at 10Hz
-	CheckButton();
+	bool safety_pressed = CheckButton();
 
-	// Make the safety button flash anyway, no matter if it's used or not.
-	FlashButton();
+	if (safety_pressed) {
+		vehicle_command_s vcmd{};
 
-	safety_s safety{};
-	safety.timestamp = hrt_absolute_time();
-	safety.safety_switch_available = true;
-	safety.safety_off = _safety_btn_off;
+		vcmd.command = vehicle_command_s::VEHICLE_CMD_START_RX_PAIR;
+		vcmd.timestamp = hrt_absolute_time();
+		_to_command.publish(vcmd);
+	}
 
-	// publish the safety status
-	_to_safety.publish(safety);
+	if (!PX4_MFT_HW_SUPPORTED(PX4_MFT_PX4IO)) {
+		// Make the safety button flash anyway, no matter if it's used or not.
+		FlashButton();
+
+		safety_s safety{};
+		safety.timestamp = hrt_absolute_time();
+		safety.safety_switch_available = true;
+		safety.safety_off = _safety_btn_off;
+
+		// publish the safety status
+		_to_safety.publish(safety);
+	}
 }
 
 int
 SafetyButton::task_spawn(int argc, char *argv[])
 {
-	if (PX4_MFT_HW_SUPPORTED(PX4_MFT_PX4IO)) {
-		PX4_ERR("not starting (use px4io for safety button)");
+	// TODO: verify intended behaviour with and without px4io
+	// if (PX4_MFT_HW_SUPPORTED(PX4_MFT_PX4IO)) {
+	// 	PX4_ERR("not starting (use px4io for safety button)");
 
-		return PX4_ERROR;
+	// 	return PX4_ERROR;
 
-	} else if (circuit_breaker_enabled("CBRK_IO_SAFETY", CBRK_IO_SAFETY_KEY)) {
-		PX4_WARN("disabled by CBRK_IO_SAFETY, exiting");
-		return PX4_ERROR;
+	// } else if (circuit_breaker_enabled("CBRK_IO_SAFETY", CBRK_IO_SAFETY_KEY)) {
+	// 	PX4_WARN("disabled by CBRK_IO_SAFETY, exiting");
+	// 	return PX4_ERROR;
 
-	} else {
+	// } else
+	{
 		SafetyButton *instance = new SafetyButton();
 
 		if (instance) {

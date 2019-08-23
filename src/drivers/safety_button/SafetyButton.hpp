@@ -43,14 +43,16 @@
 #include <px4_module.h>
 #include <px4_work_queue/ScheduledWorkItem.hpp>
 #include <uORB/Publication.hpp>
+#include <uORB/PublicationQueued.hpp>
 #include <uORB/Subscription.hpp>
 #include <uORB/topics/actuator_armed.h>
 #include <uORB/topics/safety.h>
+#include <uORB/topics/vehicle_command.h>
 
 class SafetyButton : public ModuleBase<SafetyButton>, public px4::ScheduledWorkItem
 {
 public:
-	SafetyButton() : ScheduledWorkItem(px4::wq_configurations::hp_default) {}
+	SafetyButton();
 	virtual ~SafetyButton();
 
 	/** @see ModuleBase */
@@ -71,15 +73,17 @@ public:
 
 private:
 
-	void CheckButton();
+	bool CheckButton();
 	void FlashButton();
 
 
 	uORB::Subscription		_armed_sub{ORB_ID(actuator_armed)};
 	uORB::Publication<safety_s>	_to_safety{ORB_ID(safety)};
+	uORB::PublicationQueued<vehicle_command_s>	_to_command{ORB_ID(vehicle_command)};
 
 	uint8_t				_button_counter{0};
 	uint8_t				_blink_counter{0};
+	bool				_safety_disabled{false};
 	bool				_safety_off{false};		///< State of the safety button from the subscribed safety topic
 	bool				_safety_btn_off{false};		///< State of the safety button read from the HW button
 
