@@ -73,6 +73,7 @@ px4_add_board(
 		#bl_update
 		dmesg
 		config
+		devices
 		dumpfile
 		esc_calib
 		hardfault_log
