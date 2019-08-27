@@ -51,5 +51,5 @@ target_link_libraries(px4iofirmware
 		mixer
 		rc
 		perf
-		pwm_limit
+		output_limit
 )
