@@ -154,33 +154,33 @@ int
 SafetyButton::task_spawn(int argc, char *argv[])
 {
 	if (PX4_MFT_HW_SUPPORTED(PX4_MFT_PX4IO)) {
-		PX4_ERR("not starting (use px4io for safety button)");
+		PX4_INFO("not starting (use px4io for safety button)");
 
-		return PX4_ERROR;
+		return PX4_OK;
+	}
 
-	} else if (circuit_breaker_enabled("CBRK_IO_SAFETY", CBRK_IO_SAFETY_KEY)) {
-		PX4_WARN("disabled by CBRK_IO_SAFETY, exiting");
-		return PX4_ERROR;
+	if (circuit_breaker_enabled("CBRK_IO_SAFETY", CBRK_IO_SAFETY_KEY)) {
+		PX4_INFO("disabled by CBRK_IO_SAFETY, not starting");
+		return PX4_OK;
+	}
 
-	} else {
-		SafetyButton *instance = new SafetyButton();
+	SafetyButton *instance = new SafetyButton();
 
-		if (instance) {
-			_object.store(instance);
-			_task_id = task_id_is_work_queue;
+	if (instance) {
+		_object.store(instance);
+		_task_id = task_id_is_work_queue;
 
-			if (instance->Start() == PX4_OK) {
-				return PX4_OK;
-			}
-
-		} else {
-			PX4_ERR("alloc failed");
+		if (instance->Start() == PX4_OK) {
+			return PX4_OK;
 		}
 
-		delete instance;
-		_object.store(nullptr);
-		_task_id = -1;
+	} else {
+		PX4_ERR("alloc failed");
 	}
+
+	delete instance;
+	_object.store(nullptr);
+	_task_id = -1;
 
 	return PX4_ERROR;
 }
