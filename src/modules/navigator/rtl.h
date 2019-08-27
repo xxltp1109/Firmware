@@ -114,6 +114,7 @@ private:
 	};
 
 	RTLPosition _destination; ///< the RTL position to fly to (typically the home position or a safe point)
+	bool _is_doing_safe_point_landing; ///< true if currently doing a RTL to a safe point (rally point)
 
 	float _rtl_alt{0.0f};	// AMSL altitude at which the vehicle should return to the home position
 	bool _rtl_alt_min{false};

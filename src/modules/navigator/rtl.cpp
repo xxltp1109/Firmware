@@ -114,9 +114,10 @@ RTL::on_activation()
 
 	if (closest_index == 0) {
 		_destination.set(home_position);
+		_is_doing_safe_point_landing = false;
 
 	} else {
-
+		// There is a safe point closer than home
 		// TODO: handle all possible mission_safe_point.frame cases
 		switch (closest_safe_point.frame) {
 		case 0: // MAV_FRAME_GLOBAL
@@ -125,6 +126,7 @@ RTL::on_activation()
 			_destination.lon = closest_safe_point.lon;
 			_destination.alt = closest_safe_point.alt;
 			_destination.yaw = home_position.yaw;
+			_is_doing_safe_point_landing = true;
 			break;
 
 		case 3: // MAV_FRAME_GLOBAL_RELATIVE_ALT
@@ -133,11 +135,13 @@ RTL::on_activation()
 			_destination.lon = closest_safe_point.lon;
 			_destination.alt = closest_safe_point.alt + home_position.alt; // alt of safe point is rel to home
 			_destination.yaw = home_position.yaw;
+			_is_doing_safe_point_landing = true;
 			break;
 
 		default:
 			mavlink_log_critical(_navigator->get_mavlink_log_pub(), "RTL: unsupported MAV_FRAME. Landing at HOME.");
 			_destination.set(home_position);
+			_is_doing_safe_point_landing = false;
 			break;
 		}
 	}
@@ -148,7 +152,7 @@ RTL::on_activation()
 		// For safety reasons don't go into RTL if landed.
 		_rtl_state = RTL_STATE_LANDED;
 
-	} else if ((rtl_type() == RTL_LAND) && _navigator->on_mission_landing()) {
+	} else if ((rtl_type() == RTL_LAND && !_is_doing_safe_point_landing) && _navigator->on_mission_landing()) {
 		// RTL straight to RETURN state, but mission will takeover for landing.
 
 	} else if ((global_position.alt < _destination.alt + _param_rtl_return_alt.get()) || _rtl_alt_min) {
@@ -185,8 +189,8 @@ RTL::set_rtl_item()
 {
 	// RTL_TYPE: mission landing.
 	// Landing using planned mission landing, fly to DO_LAND_START instead of returning _destination.
-	// Do nothing, let navigator takeover with mission landing.
-	if (rtl_type() == RTL_LAND) {
+	// After reaching DO_LAND_START, do nothing, let navigator takeover with mission landing.
+	if (rtl_type() == RTL_LAND && !_is_doing_safe_point_landing) {
 		if (_rtl_state > RTL_STATE_CLIMB) {
 			if (_navigator->start_mission_landing()) {
 				mavlink_and_console_log_info(_navigator->get_mavlink_log_pub(), "RTL: using mission landing");

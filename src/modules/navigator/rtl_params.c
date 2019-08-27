@@ -110,8 +110,8 @@ PARAM_DEFINE_FLOAT(RTL_MIN_DIST, 5.0f);
  * Fly straight to the home location or planned mission landing and land there or
  * use the planned mission to get to those points.
  *
- * @value 0 Return home via direct path
- * @value 1 Return to a planned mission landing, if available, via direct path, else return to home via direct path
+ * @value 0 Return via direct path to home or to a safe landing point if closer
+ * @value 1 Return to a planned mission landing, if available and closest, via direct path, else return to home or closest safe landing point via direct path
  * @value 2 Return to a planned mission landing, if available, using the mission path, else return to home via the reverse mission path
  * @group Return Mode
  */
